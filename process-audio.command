@@ -13,7 +13,12 @@ pause_before_close() {
 
 choose_audio_file() {
   if command -v osascript >/dev/null 2>&1; then
-    osascript -e 'POSIX path of (choose file with prompt "Choose the sermon audio file to process")' 2>/dev/null || return 1
+    osascript \
+      -e 'try' \
+      -e 'tell application "Terminal" to activate' \
+      -e 'end try' \
+      -e 'delay 0.2' \
+      -e 'POSIX path of (choose file with prompt "Choose the sermon audio file to process")' 2>/dev/null || return 1
     return 0
   fi
 
@@ -23,7 +28,12 @@ choose_audio_file() {
 
 choose_output_folder() {
   if command -v osascript >/dev/null 2>&1; then
-    osascript -e 'POSIX path of (choose folder with prompt "Choose where to save the processed MP3")' 2>/dev/null || return 1
+    osascript \
+      -e 'try' \
+      -e 'tell application "Terminal" to activate' \
+      -e 'end try' \
+      -e 'delay 0.2' \
+      -e 'POSIX path of (choose folder with prompt "Choose where to save the processed MP3")' 2>/dev/null || return 1
     return 0
   fi
 
@@ -56,7 +66,7 @@ echo
 echo "Processing..."
 echo
 
-if ./process-audio.sh "$INPUT" --outdir "$OUTDIR"; then
+if ./process-audio.sh "$INPUT" --outdir "$OUTDIR" --interactive-trim; then
   echo
   echo "Done. Opening the output folder..."
   if command -v open >/dev/null 2>&1; then

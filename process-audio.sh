@@ -15,6 +15,10 @@ Usage:
 Options:
   --outdir DIR              Folder for the processed MP3.
   --output FILE             Exact output file path.
+  --start TIME              Keep audio starting at TIME.
+  --end TIME                Keep audio until TIME. If omitted with --start, keep through the end.
+  --interactive-trim        Ask whether to trim the audio.
+  --no-trim                 Do not trim manually or by silence detection.
   --no-trim-silence         Do not trim start/end silence.
   --trim-threshold VALUE    Silence threshold, default -60dB.
   --trim-start-duration N   Start silence duration in seconds, default 1.
@@ -28,6 +32,8 @@ Options:
 Examples:
   ./process-audio.sh ~/Downloads/sermon.wav
   ./process-audio.sh ~/Downloads/sermon.wav --outdir ~/Desktop/Processed
+  ./process-audio.sh ~/Downloads/sermon.wav --start 1:12 --end 42:30
+  ./process-audio.sh ~/Downloads/sermon.wav --no-trim
   ./process-audio.sh ~/Downloads/sermon.wav --no-trim-silence
 USAGE
 }
@@ -36,6 +42,11 @@ INPUT=""
 OUTDIR=""
 OUTPUT=""
 LOG=""
+MANUAL_TRIM=0
+MANUAL_START_TIME=""
+MANUAL_END_TIME=""
+INTERACTIVE_TRIM=0
+NO_TRIM=0
 TRIM_SILENCE=1
 TRIM_THRESHOLD="-60dB"
 TRIM_START_DURATION="1"
@@ -60,6 +71,27 @@ while [ "$#" -gt 0 ]; do
       LOG="${2:-}"
       [ -n "$LOG" ] || audio_die "--log requires a file"
       shift 2
+      ;;
+    --start)
+      MANUAL_START_TIME="${2:-}"
+      [ -n "$MANUAL_START_TIME" ] || audio_die "--start requires a time"
+      MANUAL_TRIM=1
+      shift 2
+      ;;
+    --end)
+      MANUAL_END_TIME="${2:-}"
+      [ -n "$MANUAL_END_TIME" ] || audio_die "--end requires a time"
+      MANUAL_TRIM=1
+      shift 2
+      ;;
+    --interactive-trim)
+      INTERACTIVE_TRIM=1
+      shift
+      ;;
+    --no-trim)
+      NO_TRIM=1
+      TRIM_SILENCE=0
+      shift
       ;;
     --no-trim-silence)
       TRIM_SILENCE=0
@@ -116,6 +148,10 @@ audio_is_audio_file "$INPUT" || audio_die "Unsupported audio file type: $INPUT"
 audio_require_command ffmpeg
 audio_require_command ffprobe
 
+if [ "$NO_TRIM" -eq 1 ] && { [ "$MANUAL_TRIM" -eq 1 ] || [ "$INTERACTIVE_TRIM" -eq 1 ]; }; then
+  audio_die "--no-trim cannot be combined with --start, --end, or --interactive-trim"
+fi
+
 INPUT="$(audio_abs_path "$INPUT")"
 [ -n "$OUTDIR" ] || OUTDIR="$(audio_default_outdir_for "$INPUT")"
 [ -n "$OUTPUT" ] || OUTPUT="$(audio_default_output "$INPUT" "-processed" "$OUTDIR")"
@@ -130,6 +166,10 @@ FFPROBE_INPUT_ARGS=()
 FFMPEG_INPUT_ARGS=()
 INPUT_FORMAT_NOTE="container"
 INPUT_PROBE_WARNING=""
+MANUAL_START_SECONDS="0"
+MANUAL_END_SECONDS=""
+MANUAL_SECTION_END=""
+MANUAL_SECTION_DURATION=""
 
 log_line() {
   if [ "$#" -eq 0 ]; then
@@ -204,6 +244,26 @@ configure_input_format() {
   return 1
 }
 
+ask_interactive_trim() {
+  local answer
+
+  echo
+  read -r -p "Do you want to trim the audio? [y/N] " answer
+  case "$answer" in
+    y|Y|yes|YES|Yes)
+      MANUAL_TRIM=1
+      read -r -p "Start time to keep [default: 0:00]: " MANUAL_START_TIME
+      read -r -p "End time to keep [blank: original end]: " MANUAL_END_TIME
+      [ -n "$MANUAL_START_TIME" ] || MANUAL_START_TIME="0"
+      ;;
+    *)
+      MANUAL_TRIM=0
+      MANUAL_START_TIME=""
+      MANUAL_END_TIME=""
+      ;;
+  esac
+}
+
 probe_duration() {
   if [ "${#FFPROBE_INPUT_ARGS[@]}" -gt 0 ]; then
     ffprobe -v error "${FFPROBE_INPUT_ARGS[@]}" -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$INPUT"
@@ -216,15 +276,28 @@ detect_edge_trim() {
   local detect_log="$1"
   local duration="$2"
   local detect_duration
+  local silence_filter
+  local filters=()
 
   detect_duration="$(awk -v start_seconds="$TRIM_START_DURATION" -v end_seconds="$TRIM_END_DURATION" 'BEGIN { print (start_seconds < end_seconds ? start_seconds : end_seconds) }')"
+  silence_filter="silencedetect=noise=${TRIM_THRESHOLD}:d=${detect_duration}"
+  if [ "$MANUAL_TRIM" -eq 1 ]; then
+    if [ -n "$MANUAL_END_SECONDS" ]; then
+      filters=("atrim=start=${MANUAL_START_SECONDS}:end=${MANUAL_END_SECONDS}" "asetpts=PTS-STARTPTS" "$silence_filter")
+    else
+      filters=("atrim=start=${MANUAL_START_SECONDS}" "asetpts=PTS-STARTPTS" "$silence_filter")
+    fi
+  else
+    filters=("$silence_filter")
+  fi
+
   if [ "${#FFMPEG_INPUT_ARGS[@]}" -gt 0 ]; then
     ffmpeg -hide_banner -nostats "${FFMPEG_INPUT_ARGS[@]}" -i "$INPUT" \
-      -af "silencedetect=noise=${TRIM_THRESHOLD}:d=${detect_duration}" \
+      -af "$(audio_join_filters "${filters[@]}")" \
       -f null - > "$detect_log" 2>&1
   else
     ffmpeg -hide_banner -nostats -i "$INPUT" \
-      -af "silencedetect=noise=${TRIM_THRESHOLD}:d=${detect_duration}" \
+      -af "$(audio_join_filters "${filters[@]}")" \
       -f null - > "$detect_log" 2>&1
   fi
 
@@ -306,24 +379,56 @@ TRIMMED_END_SECONDS="0"
 OUTPUT_DURATION=""
 
 configure_input_format
+INPUT_DURATION="$(probe_duration)"
+
+if [ "$INTERACTIVE_TRIM" -eq 1 ]; then
+  ask_interactive_trim
+fi
+
+if [ "$MANUAL_TRIM" -eq 1 ]; then
+  [ -n "$MANUAL_START_TIME" ] || MANUAL_START_TIME="0"
+  MANUAL_START_SECONDS="$(audio_parse_time "$MANUAL_START_TIME")"
+  if [ -n "$MANUAL_END_TIME" ]; then
+    MANUAL_END_SECONDS="$(audio_parse_time "$MANUAL_END_TIME")"
+    [ "$MANUAL_END_SECONDS" -gt "$MANUAL_START_SECONDS" ] || audio_die "End time must be after start time"
+  fi
+
+  awk -v start="$MANUAL_START_SECONDS" -v duration="$INPUT_DURATION" 'BEGIN { exit(start < duration ? 0 : 1) }' \
+    || audio_die "Start time must be before the end of the audio"
+  if [ -n "$MANUAL_END_SECONDS" ]; then
+    awk -v end="$MANUAL_END_SECONDS" -v duration="$INPUT_DURATION" 'BEGIN { exit(end <= duration ? 0 : 1) }' \
+      || audio_die "End time must not be after the end of the audio"
+  fi
+
+  MANUAL_SECTION_END="${MANUAL_END_SECONDS:-$INPUT_DURATION}"
+  MANUAL_SECTION_DURATION="$(awk -v start="$MANUAL_START_SECONDS" -v end="$MANUAL_SECTION_END" 'BEGIN { printf "%.3f", end - start }')"
+else
+  MANUAL_SECTION_END="$INPUT_DURATION"
+  MANUAL_SECTION_DURATION="$INPUT_DURATION"
+fi
 
 if [ "$TRIM_SILENCE" -eq 1 ]; then
   DETECT_LOG="$(mktemp "${TMPDIR:-/tmp}/process-sermon-silence.XXXXXX")"
-  INPUT_DURATION="$(probe_duration)"
-  read -r TRIM_START TRIM_END TRIM_START_WARN TRIM_END_WARN < <(detect_edge_trim "$DETECT_LOG" "$INPUT_DURATION")
-  TRIMMED_END_SECONDS="$(awk -v duration="$INPUT_DURATION" -v trim_end="$TRIM_END" 'BEGIN { printf "%.3f", duration - trim_end }')"
+  read -r TRIM_START TRIM_END TRIM_START_WARN TRIM_END_WARN < <(detect_edge_trim "$DETECT_LOG" "$MANUAL_SECTION_DURATION")
+  TRIMMED_END_SECONDS="$(awk -v duration="$MANUAL_SECTION_DURATION" -v trim_end="$TRIM_END" 'BEGIN { printf "%.3f", duration - trim_end }')"
   OUTPUT_DURATION="$(awk -v trim_start="$TRIM_START" -v trim_end="$TRIM_END" 'BEGIN { printf "%.3f", trim_end - trim_start }')"
 else
   DETECT_LOG=""
-  INPUT_DURATION="$(probe_duration)"
-  OUTPUT_DURATION="$INPUT_DURATION"
+  OUTPUT_DURATION="$MANUAL_SECTION_DURATION"
 fi
 
-FILTERS=("highpass=f=80")
-if [ "$TRIM_SILENCE" -eq 1 ]; then
-  FILTERS=("atrim=start=${TRIM_START}:end=${TRIM_END}" "asetpts=PTS-STARTPTS" "${FILTERS[@]}")
+FILTERS=()
+if [ "$MANUAL_TRIM" -eq 1 ]; then
+  if [ -n "$MANUAL_END_SECONDS" ]; then
+    FILTERS+=("atrim=start=${MANUAL_START_SECONDS}:end=${MANUAL_END_SECONDS}" "asetpts=PTS-STARTPTS")
+  else
+    FILTERS+=("atrim=start=${MANUAL_START_SECONDS}" "asetpts=PTS-STARTPTS")
+  fi
 fi
-FILTERS+=("dynaudnorm=f=150:g=15:p=0.95:m=10" "loudnorm=I=-16:LRA=11:TP=-1.5" "alimiter=limit=0.95")
+if [ "$TRIM_SILENCE" -eq 1 ]; then
+  FILTERS+=("atrim=start=${TRIM_START}:end=${TRIM_END}" "asetpts=PTS-STARTPTS")
+fi
+FILTERS+=("highpass=f=80" "dynaudnorm=f=150:g=15:p=0.95:m=10" "loudnorm=I=-16:LRA=11:TP=-1.5" "alimiter=limit=0.95")
 FILTER="$(audio_join_filters "${FILTERS[@]}")"
 
 log_line "Started: $RUN_STARTED"
@@ -335,10 +440,21 @@ if [ -n "$INPUT_PROBE_WARNING" ]; then
   log_line "Probe warning: standard WAV/container probe failed:"
   log_line "$INPUT_PROBE_WARNING"
 fi
+if [ "$MANUAL_TRIM" -eq 1 ]; then
+  if [ -n "$MANUAL_END_TIME" ]; then
+    log_line "Manual trim:          $(audio_format_duration "$MANUAL_START_SECONDS") to $(audio_format_duration "$MANUAL_END_SECONDS")"
+  else
+    log_line "Manual trim:          $(audio_format_duration "$MANUAL_START_SECONDS") to original end"
+  fi
+  log_line "Manual section length: $(audio_format_duration "$MANUAL_SECTION_DURATION") (${MANUAL_SECTION_DURATION}s)"
+fi
 if [ "$TRIM_SILENCE" -eq 1 ]; then
-  log_line "Trim:   only leading/trailing silence at $TRIM_THRESHOLD"
+  log_line "Silence trim: only leading/trailing silence at $TRIM_THRESHOLD"
   log_line "Original length:       $(audio_format_duration "$INPUT_DURATION") (${INPUT_DURATION}s)"
-  log_line "Kept range:            $(audio_format_duration "$TRIM_START") to $(audio_format_duration "$TRIM_END")"
+  if [ "$MANUAL_TRIM" -eq 1 ]; then
+    log_line "Silence scan length:   $(audio_format_duration "$MANUAL_SECTION_DURATION") (${MANUAL_SECTION_DURATION}s)"
+  fi
+  log_line "Silence kept range:    $(audio_format_duration "$TRIM_START") to $(audio_format_duration "$TRIM_END")"
   log_line "Output length:         $(audio_format_duration "$OUTPUT_DURATION") (${OUTPUT_DURATION}s)"
   log_line "Trimmed from start:    $(audio_format_duration "$TRIM_START") (${TRIM_START}s)"
   log_line "Trimmed from end:      $(audio_format_duration "$TRIMMED_END_SECONDS") (${TRIMMED_END_SECONDS}s)"
@@ -350,11 +466,15 @@ if [ "$TRIM_SILENCE" -eq 1 ]; then
   fi
   if [ "$TRIM_START_WARN" -eq 2 ] || [ "$TRIM_END_WARN" -eq 2 ]; then
     log_line "Warning: skipped automatic trim because the recording looked too quiet or ambiguous."
-    log_line "Try --trim-threshold -70dB, --no-trim-silence, or crop manually afterward."
+    log_line "Try --trim-threshold -70dB, --no-trim-silence, or --start/--end."
   fi
   log_line "Silence detect log: $DETECT_LOG"
 else
-  log_line "Trim:   disabled"
+  if [ "$MANUAL_TRIM" -eq 1 ]; then
+    log_line "Silence trim: disabled"
+  else
+    log_line "Trim:   disabled"
+  fi
 fi
 log_line
 log_line "Working: ffmpeg progress appears below."
