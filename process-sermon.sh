@@ -20,6 +20,8 @@ Options:
   --trim-start-duration N   Start silence duration in seconds, default 1.
   --trim-end-duration N     End silence duration in seconds, default 2.
   --max-auto-trim N         Max seconds to auto-trim from either edge, default 300.
+  --raw-pcm-rate N          Sample rate for headerless WAV recovery, default 44100.
+  --raw-pcm-channels N      Channel count for headerless WAV recovery, default 2.
   --log FILE                Exact log file path.
   --no-notify               Do not show macOS start/finish/failure notifications.
   -h, --help                Show this help.
@@ -41,6 +43,8 @@ TRIM_THRESHOLD="-60dB"
 TRIM_START_DURATION="1"
 TRIM_END_DURATION="2"
 MAX_AUTO_TRIM="300"
+RAW_PCM_RATE="44100"
+RAW_PCM_CHANNELS="2"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -87,6 +91,16 @@ while [ "$#" -gt 0 ]; do
       [ -n "$MAX_AUTO_TRIM" ] || audio_die "--max-auto-trim requires seconds"
       shift 2
       ;;
+    --raw-pcm-rate)
+      RAW_PCM_RATE="${2:-}"
+      [ -n "$RAW_PCM_RATE" ] || audio_die "--raw-pcm-rate requires a sample rate"
+      shift 2
+      ;;
+    --raw-pcm-channels)
+      RAW_PCM_CHANNELS="${2:-}"
+      [ -n "$RAW_PCM_CHANNELS" ] || audio_die "--raw-pcm-channels requires a channel count"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -115,8 +129,13 @@ INPUT="$(audio_abs_path "$INPUT")"
 
 mkdir -p "$(dirname "$OUTPUT")"
 mkdir -p "$(dirname "$LOG")"
+: > "$LOG"
 
 RUN_STARTED="$(date '+%Y-%m-%d %H:%M:%S')"
+FFPROBE_INPUT_ARGS=()
+FFMPEG_INPUT_ARGS=()
+INPUT_FORMAT_NOTE="container"
+INPUT_PROBE_WARNING=""
 
 log_line() {
   if [ "$#" -eq 0 ]; then
@@ -128,6 +147,11 @@ log_line() {
 
 on_error() {
   local status=$?
+  if [ -n "${INPUT_PROBE_WARNING:-}" ]; then
+    log_line
+    log_line "Probe warning:"
+    log_line "$INPUT_PROBE_WARNING"
+  fi
   log_line
   log_line "Failed:"
   log_line "$INPUT"
@@ -142,8 +166,55 @@ on_error() {
 
 trap on_error ERR
 
+has_wave_header() {
+  head -c 12 "$INPUT" | LC_ALL=C grep -q '^RIFF....WAVE'
+}
+
+is_wav_filename() {
+  local lower
+  lower="$(printf '%s\n' "$INPUT" | tr '[:upper:]' '[:lower:]')"
+  case "$lower" in
+    *.wav) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+configure_input_format() {
+  local probe_error
+  local channel_layout
+  probe_error="$(mktemp "${TMPDIR:-/tmp}/process-sermon-probe.XXXXXX")"
+
+  if ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$INPUT" >/dev/null 2>"$probe_error"; then
+    rm -f "$probe_error"
+    return 0
+  fi
+
+  INPUT_PROBE_WARNING="$(cat "$probe_error")"
+  rm -f "$probe_error"
+
+  if is_wav_filename && ! has_wave_header; then
+    case "$RAW_PCM_CHANNELS" in
+      1) channel_layout="mono" ;;
+      2) channel_layout="stereo" ;;
+      *) channel_layout="" ;;
+    esac
+
+    if [ -n "$channel_layout" ] && ffprobe -v error -f s16le -ar "$RAW_PCM_RATE" -ch_layout "$channel_layout" -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$INPUT" >/dev/null 2>&1; then
+      FFPROBE_INPUT_ARGS=(-f s16le -ar "$RAW_PCM_RATE" -ch_layout "$channel_layout")
+      FFMPEG_INPUT_ARGS=(-f s16le -ar "$RAW_PCM_RATE" -ac "$RAW_PCM_CHANNELS")
+      INPUT_FORMAT_NOTE="raw PCM fallback: signed 16-bit little-endian, ${RAW_PCM_RATE} Hz, ${RAW_PCM_CHANNELS} channel(s)"
+      return 0
+    fi
+  fi
+
+  if [ -n "$INPUT_PROBE_WARNING" ]; then
+    printf '%s\n' "$INPUT_PROBE_WARNING" >&2
+  fi
+  return 1
+}
+
 probe_duration() {
-  ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$INPUT"
+  ffprobe -v error "${FFPROBE_INPUT_ARGS[@]}" -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$INPUT"
 }
 
 detect_edge_trim() {
@@ -152,7 +223,7 @@ detect_edge_trim() {
   local detect_duration
 
   detect_duration="$(awk -v start_seconds="$TRIM_START_DURATION" -v end_seconds="$TRIM_END_DURATION" 'BEGIN { print (start_seconds < end_seconds ? start_seconds : end_seconds) }')"
-  ffmpeg -hide_banner -nostats -i "$INPUT" \
+  ffmpeg -hide_banner -nostats "${FFMPEG_INPUT_ARGS[@]}" -i "$INPUT" \
     -af "silencedetect=noise=${TRIM_THRESHOLD}:d=${detect_duration}" \
     -f null - > "$detect_log" 2>&1
 
@@ -233,6 +304,8 @@ TRIM_END_WARN=0
 TRIMMED_END_SECONDS="0"
 OUTPUT_DURATION=""
 
+configure_input_format
+
 if [ "$TRIM_SILENCE" -eq 1 ]; then
   DETECT_LOG="$(mktemp "${TMPDIR:-/tmp}/process-sermon-silence.XXXXXX")"
   INPUT_DURATION="$(probe_duration)"
@@ -256,6 +329,11 @@ log_line "Started: $RUN_STARTED"
 log_line "Input:  $INPUT"
 log_line "Output: $OUTPUT"
 log_line "Log:    $LOG"
+log_line "Format: $INPUT_FORMAT_NOTE"
+if [ -n "$INPUT_PROBE_WARNING" ]; then
+  log_line "Probe warning: standard WAV/container probe failed:"
+  log_line "$INPUT_PROBE_WARNING"
+fi
 if [ "$TRIM_SILENCE" -eq 1 ]; then
   log_line "Trim:   only leading/trailing silence at $TRIM_THRESHOLD"
   log_line "Original length:       $(audio_format_duration "$INPUT_DURATION") (${INPUT_DURATION}s)"
@@ -284,7 +362,7 @@ if [ "$NOTIFY" -eq 1 ]; then
 fi
 log_line
 
-ffmpeg -y -hide_banner -i "$INPUT" \
+ffmpeg -y -hide_banner "${FFMPEG_INPUT_ARGS[@]}" -i "$INPUT" \
   -af "$FILTER" \
   -ar 44100 \
   -ac 1 \
