@@ -99,14 +99,6 @@ audio_join_filters() {
   printf '%s\n' "$*"
 }
 
-audio_notify() {
-  local title="$1"
-  local message="$2"
-
-  command -v osascript >/dev/null 2>&1 || return 0
-  osascript -e "display notification \"${message//\"/\\\"}\" with title \"${title//\"/\\\"}\"" >/dev/null 2>&1 || true
-}
-
 audio_quote() {
   printf '%q' "$1"
 }

@@ -52,7 +52,6 @@ process_latest_once() {
   echo "New audio file detected:"
   echo "$input"
   echo "Waiting for copy/recording to finish..."
-  audio_notify "New sermon audio detected" "Waiting until the file is ready."
   audio_wait_until_stable "$input"
   echo "Starting processing..."
   "$ROOT_DIR/process-audio.sh" "$input" "$@"

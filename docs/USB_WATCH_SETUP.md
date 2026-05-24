@@ -46,7 +46,7 @@ Or, if recordings are in a subfolder:
 
 Leave that Terminal window open. When a new audio file appears, the watcher waits until the file size is stable and then runs `process-audio.sh`.
 
-You will see messages in Terminal when a file is detected, when processing starts, and when it finishes. On macOS, the processing script also sends start/finish/failure notifications.
+You will see messages in Terminal when a file is detected, when processing starts, and when it finishes.
 
 By default, output goes to:
 

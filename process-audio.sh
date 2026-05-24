@@ -23,7 +23,6 @@ Options:
   --raw-pcm-rate N          Sample rate for headerless WAV recovery, default 44100.
   --raw-pcm-channels N      Channel count for headerless WAV recovery, default 2.
   --log FILE                Exact log file path.
-  --no-notify               Do not show macOS start/finish/failure notifications.
   -h, --help                Show this help.
 
 Examples:
@@ -37,7 +36,6 @@ INPUT=""
 OUTDIR=""
 OUTPUT=""
 LOG=""
-NOTIFY=1
 TRIM_SILENCE=1
 TRIM_THRESHOLD="-60dB"
 TRIM_START_DURATION="1"
@@ -62,10 +60,6 @@ while [ "$#" -gt 0 ]; do
       LOG="${2:-}"
       [ -n "$LOG" ] || audio_die "--log requires a file"
       shift 2
-      ;;
-    --no-notify)
-      NOTIFY=0
-      shift
       ;;
     --no-trim-silence)
       TRIM_SILENCE=0
@@ -158,9 +152,6 @@ on_error() {
   log_line
   log_line "Log:"
   log_line "$LOG"
-  if [ "$NOTIFY" -eq 1 ]; then
-    audio_notify "Sermon processing failed" "Check the log: $LOG"
-  fi
   exit "$status"
 }
 
@@ -367,9 +358,6 @@ else
 fi
 log_line
 log_line "Working: ffmpeg progress appears below."
-if [ "$NOTIFY" -eq 1 ]; then
-  audio_notify "Sermon processing started" "$(basename "$INPUT")"
-fi
 log_line
 
 if [ "${#FFMPEG_INPUT_ARGS[@]}" -gt 0 ]; then
@@ -395,7 +383,3 @@ log_line "Finished: $(date '+%Y-%m-%d %H:%M:%S')"
 log_line "Log:"
 log_line "$LOG"
 audio_next_steps "$OUTPUT" "$ROOT_DIR" | tee -a "$LOG"
-
-if [ "$NOTIFY" -eq 1 ]; then
-  audio_notify "Sermon processing finished" "Saved: $OUTPUT"
-fi
