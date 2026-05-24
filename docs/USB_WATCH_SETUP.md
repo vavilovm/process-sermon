@@ -35,29 +35,29 @@ If recordings are inside a folder on the drive, include that folder too:
 Run:
 
 ```bash
-./watch-audio-folder.sh "/Volumes/ZOOM H1N"
+./extras/watch-audio-folder.sh "/Volumes/ZOOM H1N"
 ```
 
 Or, if recordings are in a subfolder:
 
 ```bash
-./watch-audio-folder.sh "/Volumes/ZOOM H1N/FOLDER01"
+./extras/watch-audio-folder.sh "/Volumes/ZOOM H1N/FOLDER01"
 ```
 
-Leave that Terminal window open. When a new audio file appears, the watcher waits until the file size is stable and then runs `process-sermon.sh`.
+Leave that Terminal window open. When a new audio file appears, the watcher waits until the file size is stable and then runs `process-audio.sh`.
 
 You will see messages in Terminal when a file is detected, when processing starts, and when it finishes. On macOS, the processing script also sends start/finish/failure notifications.
 
 By default, output goes to:
 
 ```text
-/Volumes/ZOOM H1N/Processed Sermons
+~/Documents/Processed
 ```
 
 To put processed files somewhere else:
 
 ```bash
-./watch-audio-folder.sh "/Volumes/ZOOM H1N/FOLDER01" --outdir "$HOME/Desktop/Processed Sermons"
+./extras/watch-audio-folder.sh "/Volumes/ZOOM H1N/FOLDER01" --outdir "$HOME/Desktop/Processed"
 ```
 
 ## 4. Start Automatically At Login
@@ -65,19 +65,19 @@ To put processed files somewhere else:
 Use the setup script:
 
 ```bash
-./setup-usb-watch.sh "ZOOM H1N"
+./extras/setup-usb-watch.sh "ZOOM H1N"
 ```
 
 With a recordings subfolder:
 
 ```bash
-./setup-usb-watch.sh "ZOOM H1N" "FOLDER01"
+./extras/setup-usb-watch.sh "ZOOM H1N" "FOLDER01"
 ```
 
 With output on your computer instead of the USB drive:
 
 ```bash
-./setup-usb-watch.sh "ZOOM H1N" "FOLDER01" --outdir "$HOME/Desktop/Processed Sermons"
+./extras/setup-usb-watch.sh "ZOOM H1N" "FOLDER01" --outdir "$HOME/Desktop/Processed"
 ```
 
 The setup script creates:
@@ -98,7 +98,7 @@ LaunchAgent output logs are written here:
 Each processed audio run also creates a log beside the saved MP3, for example:
 
 ```text
-/Volumes/ZOOM H1N/Processed Sermons/recording-processed.log
+~/Documents/Processed/recording-processed.log
 ```
 
 ## 5. Stop Or Remove The Watcher
@@ -117,6 +117,6 @@ rm "$HOME/Library/LaunchAgents/com.local.process-sermon-usb.plist"
 
 ## Notes
 
-`fswatch` can watch a USB drive folder once it exists. For a drive that may not be connected yet, the LaunchAgent starts `watch-audio-folder.sh`, and that script waits for `/Volumes/DRIVE NAME` to appear.
+`fswatch` can watch a USB drive folder once it exists. For a drive that may not be connected yet, the LaunchAgent starts `extras/watch-audio-folder.sh`, and that script waits for `/Volumes/DRIVE NAME` to appear.
 
-If the drive name changes, rerun `setup-usb-watch.sh` with the new drive name.
+If the drive name changes, rerun `extras/setup-usb-watch.sh` with the new drive name.

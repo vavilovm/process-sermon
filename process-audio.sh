@@ -1,5 +1,5 @@
 #!/bin/bash
-# Process one sermon audio file into a mono MP3 with silence trim and loudness normalization.
+# Process one sermon audio file into a mono MP3 with dynamic volume normalization.
 
 set -euo pipefail
 
@@ -10,7 +10,7 @@ source "$ROOT_DIR/lib/audio-common.sh"
 usage() {
   cat <<'USAGE'
 Usage:
-  ./process-sermon.sh AUDIO_FILE [options]
+  ./process-audio.sh AUDIO_FILE [options]
 
 Options:
   --outdir DIR              Folder for the processed MP3.
@@ -27,9 +27,9 @@ Options:
   -h, --help                Show this help.
 
 Examples:
-  ./process-sermon.sh ~/Downloads/sermon.wav
-  ./process-sermon.sh ~/Downloads/sermon.wav --outdir ~/Desktop/Processed
-  ./process-sermon.sh ~/Downloads/sermon.wav --no-trim-silence
+  ./process-audio.sh ~/Downloads/sermon.wav
+  ./process-audio.sh ~/Downloads/sermon.wav --outdir ~/Desktop/Processed
+  ./process-audio.sh ~/Downloads/sermon.wav --no-trim-silence
 USAGE
 }
 
@@ -214,7 +214,11 @@ configure_input_format() {
 }
 
 probe_duration() {
-  ffprobe -v error "${FFPROBE_INPUT_ARGS[@]}" -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$INPUT"
+  if [ "${#FFPROBE_INPUT_ARGS[@]}" -gt 0 ]; then
+    ffprobe -v error "${FFPROBE_INPUT_ARGS[@]}" -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$INPUT"
+  else
+    ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$INPUT"
+  fi
 }
 
 detect_edge_trim() {
@@ -223,9 +227,15 @@ detect_edge_trim() {
   local detect_duration
 
   detect_duration="$(awk -v start_seconds="$TRIM_START_DURATION" -v end_seconds="$TRIM_END_DURATION" 'BEGIN { print (start_seconds < end_seconds ? start_seconds : end_seconds) }')"
-  ffmpeg -hide_banner -nostats "${FFMPEG_INPUT_ARGS[@]}" -i "$INPUT" \
-    -af "silencedetect=noise=${TRIM_THRESHOLD}:d=${detect_duration}" \
-    -f null - > "$detect_log" 2>&1
+  if [ "${#FFMPEG_INPUT_ARGS[@]}" -gt 0 ]; then
+    ffmpeg -hide_banner -nostats "${FFMPEG_INPUT_ARGS[@]}" -i "$INPUT" \
+      -af "silencedetect=noise=${TRIM_THRESHOLD}:d=${detect_duration}" \
+      -f null - > "$detect_log" 2>&1
+  else
+    ffmpeg -hide_banner -nostats -i "$INPUT" \
+      -af "silencedetect=noise=${TRIM_THRESHOLD}:d=${detect_duration}" \
+      -f null - > "$detect_log" 2>&1
+  fi
 
   awk -v duration="$duration" -v max_trim="$MAX_AUTO_TRIM" -v start_min="$TRIM_START_DURATION" -v end_min="$TRIM_END_DURATION" '
     BEGIN {
@@ -322,7 +332,7 @@ FILTERS=("highpass=f=80")
 if [ "$TRIM_SILENCE" -eq 1 ]; then
   FILTERS=("atrim=start=${TRIM_START}:end=${TRIM_END}" "asetpts=PTS-STARTPTS" "${FILTERS[@]}")
 fi
-FILTERS+=("loudnorm=I=-16:LRA=11:TP=-1.5" "alimiter=limit=0.95")
+FILTERS+=("dynaudnorm=f=150:g=15:p=0.95:m=10" "loudnorm=I=-16:LRA=11:TP=-1.5" "alimiter=limit=0.95")
 FILTER="$(audio_join_filters "${FILTERS[@]}")"
 
 log_line "Started: $RUN_STARTED"
@@ -362,13 +372,23 @@ if [ "$NOTIFY" -eq 1 ]; then
 fi
 log_line
 
-ffmpeg -y -hide_banner "${FFMPEG_INPUT_ARGS[@]}" -i "$INPUT" \
-  -af "$FILTER" \
-  -ar 44100 \
-  -ac 1 \
-  -codec:a libmp3lame \
-  -b:a 96k \
-  "$OUTPUT" 2>&1 | tee -a "$LOG"
+if [ "${#FFMPEG_INPUT_ARGS[@]}" -gt 0 ]; then
+  ffmpeg -y -hide_banner "${FFMPEG_INPUT_ARGS[@]}" -i "$INPUT" \
+    -af "$FILTER" \
+    -ar 44100 \
+    -ac 1 \
+    -codec:a libmp3lame \
+    -b:a 96k \
+    "$OUTPUT" 2>&1 | tee -a "$LOG"
+else
+  ffmpeg -y -hide_banner -i "$INPUT" \
+    -af "$FILTER" \
+    -ar 44100 \
+    -ac 1 \
+    -codec:a libmp3lame \
+    -b:a 96k \
+    "$OUTPUT" 2>&1 | tee -a "$LOG"
+fi
 
 log_line
 log_line "Finished: $(date '+%Y-%m-%d %H:%M:%S')"

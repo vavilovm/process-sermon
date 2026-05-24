@@ -8,11 +8,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 usage() {
   cat <<'USAGE'
 Usage:
-  ./setup-usb-watch.sh "DRIVE NAME" [SUBFOLDER] [--outdir DIR]
+  ./extras/setup-usb-watch.sh "DRIVE NAME" [SUBFOLDER] [--outdir DIR]
 
 Examples:
-  ./setup-usb-watch.sh "ZOOM H1N"
-  ./setup-usb-watch.sh "ZOOM H1N" "FOLDER01" --outdir ~/Desktop/Processed
+  ./extras/setup-usb-watch.sh "ZOOM H1N"
+  ./extras/setup-usb-watch.sh "ZOOM H1N" "FOLDER01" --outdir ~/Desktop/Processed
 
 This creates ~/Library/LaunchAgents/com.local.process-sermon-usb.plist.
 It does not install fswatch for you. Install it first with:

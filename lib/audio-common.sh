@@ -82,8 +82,7 @@ audio_name_without_ext() {
 }
 
 audio_default_outdir_for() {
-  local input="$1"
-  printf '%s/Processed Sermons\n' "$(dirname "$input")"
+  printf '%s/Documents/Processed\n' "$HOME"
 }
 
 audio_default_output() {
@@ -148,9 +147,9 @@ audio_next_steps() {
   echo "open $(audio_quote "$output_dir")"
   echo
   echo "To crop it afterward:"
-  echo "$(audio_quote "$script_dir/crop-audio.sh") $(audio_quote "$output") START_TIME END_TIME"
+  echo "$(audio_quote "$script_dir/trim-audio.sh") $(audio_quote "$output") START_TIME [END_TIME]"
   echo "Example:"
-  echo "$(audio_quote "$script_dir/crop-audio.sh") $(audio_quote "$output") 1:12 42:30"
+  echo "$(audio_quote "$script_dir/trim-audio.sh") $(audio_quote "$output") 1:12"
 }
 
 audio_parse_time() {

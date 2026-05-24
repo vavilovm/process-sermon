@@ -3,14 +3,14 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
 # shellcheck source=lib/audio-common.sh
 source "$ROOT_DIR/lib/audio-common.sh"
 
 usage() {
   cat <<'USAGE'
 Usage:
-  ./rescue-dynaudnorm.sh AUDIO_FILE [options]
+  ./extras/rescue-dynaudnorm.sh AUDIO_FILE [options]
 
 Options:
   --outdir DIR    Folder for the rescued MP3.
@@ -18,7 +18,7 @@ Options:
   -h, --help      Show this help.
 
 Example:
-  ./rescue-dynaudnorm.sh sermon-with-uneven-volume.wav
+  ./extras/rescue-dynaudnorm.sh sermon-with-uneven-volume.wav
 USAGE
 }
 

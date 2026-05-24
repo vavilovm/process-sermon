@@ -3,21 +3,21 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
 # shellcheck source=lib/audio-common.sh
 source "$ROOT_DIR/lib/audio-common.sh"
 
 usage() {
   cat <<'USAGE'
 Usage:
-  ./watch-audio-folder.sh FOLDER [process-sermon options]
+  ./extras/watch-audio-folder.sh FOLDER [process-audio options]
 
 This requires fswatch:
   brew install fswatch
 
 Example:
-  ./watch-audio-folder.sh "/Volumes/RECORDER"
-  ./watch-audio-folder.sh "/Volumes/RECORDER/Recordings" --outdir ~/Desktop/Processed
+  ./extras/watch-audio-folder.sh "/Volumes/RECORDER"
+  ./extras/watch-audio-folder.sh "/Volumes/RECORDER/Recordings" --outdir ~/Desktop/Processed
 USAGE
 }
 
@@ -55,7 +55,7 @@ process_latest_once() {
   audio_notify "New sermon audio detected" "Waiting until the file is ready."
   audio_wait_until_stable "$input"
   echo "Starting processing..."
-  "$ROOT_DIR/process-sermon.sh" "$input" "$@"
+  "$ROOT_DIR/process-audio.sh" "$input" "$@"
   echo "$input" >> "$STATE_FILE"
   echo "Processing finished."
 }
