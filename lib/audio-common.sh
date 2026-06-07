@@ -82,7 +82,7 @@ audio_name_without_ext() {
 }
 
 audio_default_outdir_for() {
-  printf '%s/Documents/Processed\n' "$HOME"
+  printf '%s/Documents/sermons\n' "$HOME"
 }
 
 audio_default_output() {

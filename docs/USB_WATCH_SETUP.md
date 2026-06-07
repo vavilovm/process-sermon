@@ -51,7 +51,7 @@ You will see messages in Terminal when a file is detected, when processing start
 By default, output goes to:
 
 ```text
-~/Documents/Processed
+~/Documents/sermons
 ```
 
 To put processed files somewhere else:
@@ -98,7 +98,7 @@ LaunchAgent output logs are written here:
 Each processed audio run also creates a log beside the saved MP3, for example:
 
 ```text
-~/Documents/Processed/recording-processed.log
+~/Documents/sermons/recording-processed.log
 ```
 
 ## 5. Stop Or Remove The Watcher

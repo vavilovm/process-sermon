@@ -26,34 +26,16 @@ choose_audio_file() {
   printf '%s\n' "$REPLY"
 }
 
-choose_output_folder() {
-  if command -v osascript >/dev/null 2>&1; then
-    osascript \
-      -e 'try' \
-      -e 'tell application "Terminal" to activate' \
-      -e 'end try' \
-      -e 'delay 0.2' \
-      -e 'POSIX path of (choose folder with prompt "Choose where to save the processed MP3")' 2>/dev/null || return 1
-    return 0
-  fi
-
-  read -r -p "Output folder [default: ~/Documents/Processed]: " REPLY
-  printf '%s\n' "$REPLY"
-}
-
 echo "Process Sermon Audio"
 echo
+
+OUTDIR="$HOME/Documents/sermons"
 
 INPUT="$(choose_audio_file || true)"
 if [ -z "${INPUT:-}" ]; then
   echo "No audio file selected. Nothing was processed."
   pause_before_close
   exit 0
-fi
-
-OUTDIR="$(choose_output_folder || true)"
-if [ -z "${OUTDIR:-}" ]; then
-  OUTDIR="$HOME/Documents/Processed"
 fi
 
 echo

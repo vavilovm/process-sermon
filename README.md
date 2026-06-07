@@ -8,14 +8,14 @@ Small ffmpeg tools for cleaning up sermon recordings.
 ./process-audio.sh ~/Downloads/sermon.wav
 ```
 
-On macOS, a non-technical user can double-click `process-audio.command`, choose the sermon audio file, choose where to save the processed MP3, and wait for the output folder to open.
+On macOS, a non-technical user can double-click `process-audio.command`, choose the sermon audio file, and wait for the output folder to open.
 
 The main processor now uses dynamic audio normalization (`dynaudnorm`) because that has worked best for these recordings. It also trims only leading/trailing silence, preserves pauses in the middle, applies a high-pass filter, normalizes final loudness, limits peaks, and exports a mono MP3.
 
 Default output goes to:
 
 ```text
-~/Documents/Processed
+~/Documents/sermons
 ```
 
 While it runs, Terminal shows ffmpeg progress. Each run also writes a log beside the MP3.
