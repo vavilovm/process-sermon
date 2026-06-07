@@ -127,7 +127,6 @@ audio_format_duration() {
 
 audio_next_steps() {
   local output="$1"
-  local script_dir="$2"
   local output_dir
   output_dir="$(dirname "$output")"
 
@@ -137,11 +136,6 @@ audio_next_steps() {
   echo
   echo "To locate it:"
   echo "open $(audio_quote "$output_dir")"
-  echo
-  echo "To crop it afterward:"
-  echo "$(audio_quote "$script_dir/trim-audio.sh") $(audio_quote "$output") START_TIME [END_TIME]"
-  echo "Example:"
-  echo "$(audio_quote "$script_dir/trim-audio.sh") $(audio_quote "$output") 1:12"
 }
 
 audio_parse_time() {

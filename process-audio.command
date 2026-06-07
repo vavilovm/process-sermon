@@ -66,7 +66,7 @@ echo
 echo "Processing..."
 echo
 
-if ./process-audio.sh "$INPUT" --outdir "$OUTDIR" --interactive-trim; then
+if ./process-audio.sh "$INPUT" --outdir "$OUTDIR"; then
   echo
   echo "Done. Opening the output folder..."
   if command -v open >/dev/null 2>&1; then

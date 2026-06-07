@@ -8,7 +8,7 @@ Small ffmpeg tools for cleaning up sermon recordings.
 ./process-audio.sh ~/Downloads/sermon.wav
 ```
 
-On macOS, a non-technical user can double-click `process-audio.command`, choose the sermon audio file, choose where to save the processed MP3, answer whether to trim the audio, and wait for the output folder to open.
+On macOS, a non-technical user can double-click `process-audio.command`, choose the sermon audio file, choose where to save the processed MP3, and wait for the output folder to open.
 
 The main processor now uses dynamic audio normalization (`dynaudnorm`) because that has worked best for these recordings. It also trims only leading/trailing silence, preserves pauses in the middle, applies a high-pass filter, normalizes final loudness, limits peaks, and exports a mono MP3.
 
@@ -24,16 +24,13 @@ Common options:
 
 ```bash
 ./process-audio.sh ~/Downloads/sermon.wav --no-trim-silence
-./process-audio.sh ~/Downloads/sermon.wav --start 1:12 --end 42:30
-./process-audio.sh ~/Downloads/sermon.wav --start 1:12
-./process-audio.sh ~/Downloads/sermon.wav --no-trim
 ./process-audio.sh ~/Downloads/sermon.wav --trim-threshold -65dB
 ./process-audio.sh ~/Downloads/sermon.wav --max-auto-trim 120
 ./process-audio.sh ~/Downloads/sermon.wav --outdir ~/Desktop/Processed
 ./process-audio.sh ~/Downloads/sermon.wav --log ~/Desktop/sermon-process.log
 ```
 
-When processing finishes, the script prints the saved file path, an `open ...` command for the output folder, and the trim command to use if the beginning/end still need manual adjustment.
+When processing finishes, the script prints the saved file path and an `open ...` command for the output folder.
 
 ## Trim Manually
 
